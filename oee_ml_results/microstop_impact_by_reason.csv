@@ -1,0 +1,28 @@
+DES_EVENTO,microstops,downtime_min,estimated_loss_units
+Calibracion   Preparacion de Linea,340,1329.0,78374.50000120861
+Paradas Operacionales Imprevistas,245,228.0,17296.000000159136
+Fallas de Equipos de Pesaje,22,97.0,9700.000000406146
+Atascamiento de Proceso,11,53.0,4560.00000016869
+Fallas de Codificacion,15,68.0,4372.000000048421
+Falla de fajilladora,22,93.0,3263.999999653536
+Fallas Mecanicas de Procesos,10,35.0,2772.0000002267548
+Ausencia de personal,10,27.0,1954.0000001082412
+Defectos en material de empaque,13,48.0,1954.0000000498028
+Falta de Envases,14,59.0,1930.9999998307674
+Fallas de Automatizacion Scada PLC HMI,6,17.0,1699.999999823009
+Falta de Materiales de empaques,9,32.0,1129.9999999947229
+Falla de llenadora Dosificadora,2,10.0,1040.0
+Falla operacional ,1,4.0,400.00000004882514
+Sistema de Climatizacion Refrigeracion Freon,1,4.0,400.0
+Fallas por Vapor,1,5.0,200.00000002956557
+Fallas de Control Neumatico,1,2.0,199.9999999704119
+Falla de Encintadora,1,5.0,199.99999994955988
+Falta de Prod. Semielaborado Materia Prima,1,5.0,199.9999997739726
+Fallas Electronicas,1,5.0,175.0
+Falta de Materiales y Repuestos,2,8.0,96.00000000428444
+Sistemas de Instrumentacion Electronica,1,4.0,48.00000000738437
+Exceso de Tiempos,1,3.0,36.0
+Retraso en entrega de analisis,1,1.0,20.999999995836983
+Falla de cadena de arrastre,1,0.0,0.0
+Fallas de Elementos Electricos,1,0.0,0.0
+Sistemas Mecanicos,1,0.0,0.0
