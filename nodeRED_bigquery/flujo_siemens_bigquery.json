@@ -1,0 +1,216 @@
+[
+  {
+    "id": "tab_siemens_bq",
+    "type": "tab",
+    "label": "Siemens IoT -> BigQuery",
+    "disabled": false,
+    "info": "Recibe datos de un dispositivo Siemens (IOT2050, S7-1200/1500 con MQTT, Industrial Edge) por MQTT, los acumula en lotes y los inserta en Google BigQuery."
+  },
+  {
+    "id": "cm_1",
+    "type": "comment",
+    "z": "tab_siemens_bq",
+    "name": "1) Entrada MQTT desde el Siemens",
+    "info": "Configura el broker en el nodo 'broker_mqtt' (host, puerto, usuario). El Siemens debe publicar JSON en el topic siemens/<dispositivo>/datos",
+    "x": 190,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "broker_mqtt",
+    "type": "mqtt-broker",
+    "name": "Broker MQTT Siemens",
+    "broker": "localhost",
+    "port": "1883",
+    "clientid": "nodered-siemens-bq",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "closeTopic": "",
+    "willTopic": ""
+  },
+  {
+    "id": "mqtt_in_1",
+    "type": "mqtt in",
+    "z": "tab_siemens_bq",
+    "name": "Siemens datos",
+    "topic": "siemens/+/datos",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "broker_mqtt",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 140,
+    "y": 100,
+    "wires": [["fn_normalizar"]]
+  },
+  {
+    "id": "inject_test",
+    "type": "inject",
+    "z": "tab_siemens_bq",
+    "name": "Prueba: simular dato Siemens",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "siemens/s7-1500/datos",
+    "payload": "{\"linea\":\"8005\",\"cod_evento\":4,\"estado\":\"Produccion\",\"velocidad\":172.5,\"unid_producidas\":1520,\"unid_buenas\":1478,\"temperatura\":41.3}",
+    "payloadType": "json",
+    "x": 180,
+    "y": 160,
+    "wires": [["fn_normalizar"]]
+  },
+  {
+    "id": "inject_flush",
+    "type": "inject",
+    "z": "tab_siemens_bq",
+    "name": "Vaciar buffer cada 30 s",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "30",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "30",
+    "topic": "flush",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 220,
+    "wires": [["fn_normalizar"]]
+  },
+  {
+    "id": "cm_2",
+    "type": "comment",
+    "z": "tab_siemens_bq",
+    "name": "2) Normaliza y acumula en lotes (50 filas o 30 s)",
+    "info": "Convierte el JSON del Siemens en una fila con el esquema de la tabla. Acumula en memoria del flujo y envia el lote cuando llega a 50 filas o cuando pasa el temporizador de 30 s.",
+    "x": 470,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "fn_normalizar",
+    "type": "function",
+    "z": "tab_siemens_bq",
+    "name": "Normalizar y acumular",
+    "func": "const BATCH = 50;\nconst MAX_BUFFER = 5000;\nlet buf = flow.get('buffer') || [];\n\nif (msg.topic !== 'flush') {\n    let p = msg.payload;\n    if (typeof p === 'string') {\n        try { p = JSON.parse(p); }\n        catch (e) { node.warn('Payload no es JSON valido'); return null; }\n    }\n    if (p === null || typeof p !== 'object') { return null; }\n\n    const num = v => (v === undefined || v === null || v === '' || isNaN(Number(v))) ? null : Number(v);\n    const partes = (msg.topic || '').split('/');\n\n    const row = {\n        timestamp: p.timestamp ? new Date(p.timestamp).toISOString() : new Date().toISOString(),\n        dispositivo: p.dispositivo || p.device || partes[1] || 'desconocido',\n        linea: p.linea !== undefined ? String(p.linea) : null,\n        cod_evento: num(p.cod_evento),\n        estado: p.estado !== undefined ? String(p.estado) : null,\n        velocidad: num(p.velocidad),\n        unid_producidas: num(p.unid_producidas),\n        unid_buenas: num(p.unid_buenas),\n        temperatura: num(p.temperatura),\n        raw: JSON.stringify(p)\n    };\n    buf.push(row);\n    if (buf.length > MAX_BUFFER) { buf = buf.slice(buf.length - MAX_BUFFER); }\n}\n\nconst enviar = (msg.topic === 'flush') ? buf.length > 0 : buf.length >= BATCH;\nif (enviar) {\n    flow.set('buffer', []);\n    node.status({ fill: 'blue', shape: 'dot', text: 'lote de ' + buf.length });\n    return { payload: buf };\n}\n\nflow.set('buffer', buf);\nnode.status({ fill: 'grey', shape: 'ring', text: 'buffer: ' + buf.length });\nreturn null;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 130,
+    "wires": [["fn_bigquery", "dbg_lote"]]
+  },
+  {
+    "id": "cm_3",
+    "type": "comment",
+    "z": "tab_siemens_bq",
+    "name": "3) Inserta el lote en BigQuery",
+    "info": "Requiere: npm i @google-cloud/bigquery en ~/.node-red, functionExternalModules: true en settings.js y las variables de entorno BQ_PROJECT, BQ_DATASET, BQ_TABLE y GOOGLE_APPLICATION_CREDENTIALS.",
+    "x": 730,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "fn_bigquery",
+    "type": "function",
+    "z": "tab_siemens_bq",
+    "name": "Insertar en BigQuery",
+    "func": "const rows = msg.payload;\nif (!Array.isArray(rows) || rows.length === 0) { return null; }\n\nconst projectId = env.get('BQ_PROJECT');\nconst datasetId = env.get('BQ_DATASET');\nconst tableId = env.get('BQ_TABLE');\nif (!projectId || !datasetId || !tableId) {\n    node.error('Faltan variables de entorno BQ_PROJECT, BQ_DATASET o BQ_TABLE', msg);\n    return null;\n}\n\nlet bq = context.get('bq');\nif (!bq) {\n    bq = new BigQuery.BigQuery({ projectId: projectId });\n    context.set('bq', bq);\n}\n\ntry {\n    await bq.dataset(datasetId).table(tableId).insert(rows);\n    node.status({ fill: 'green', shape: 'dot', text: rows.length + ' filas insertadas' });\n    return { payload: { insertadas: rows.length, tabla: projectId + '.' + datasetId + '.' + tableId } };\n} catch (err) {\n    if (err.name === 'PartialFailureError') {\n        // Filas con datos invalidos: se descartan para no entrar en bucle de reintentos\n        const detalle = JSON.stringify(err.errors || []).slice(0, 600);\n        node.error('BigQuery rechazo filas: ' + detalle, msg);\n        node.status({ fill: 'yellow', shape: 'ring', text: 'filas rechazadas' });\n        return null;\n    }\n    // Error de red/credenciales: se devuelve el lote al buffer para reintentar en el proximo ciclo\n    const buf = flow.get('buffer') || [];\n    flow.set('buffer', rows.concat(buf).slice(0, 5000));\n    node.error('BigQuery: ' + err.message, msg);\n    node.status({ fill: 'red', shape: 'ring', text: 'error, se reintenta' });\n    return null;\n}",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "BigQuery",
+        "module": "@google-cloud/bigquery"
+      }
+    ],
+    "x": 740,
+    "y": 130,
+    "wires": [["dbg_resultado"]]
+  },
+  {
+    "id": "dbg_lote",
+    "type": "debug",
+    "z": "tab_siemens_bq",
+    "name": "Lote enviado",
+    "active": false,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 730,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "dbg_resultado",
+    "type": "debug",
+    "z": "tab_siemens_bq",
+    "name": "Resultado BigQuery",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 980,
+    "y": 130,
+    "wires": []
+  },
+  {
+    "id": "catch_1",
+    "type": "catch",
+    "z": "tab_siemens_bq",
+    "name": "Errores del flujo",
+    "scope": null,
+    "uncaught": false,
+    "x": 160,
+    "y": 300,
+    "wires": [["dbg_errores"]]
+  },
+  {
+    "id": "dbg_errores",
+    "type": "debug",
+    "z": "tab_siemens_bq",
+    "name": "Errores",
+    "active": true,
+    "tosidebar": true,
+    "console": true,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 380,
+    "y": 300,
+    "wires": []
+  }
+]
